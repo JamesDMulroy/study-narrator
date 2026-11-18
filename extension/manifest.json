@@ -1,0 +1,100 @@
+{
+  "manifest_version": 3,
+  "name": "Study Narrator",
+  "version": "1.3.0",
+  "description": "Reads the important parts of a page aloud with AI (Claude, ChatGPT, Codex, Gemini, local models), answers your spoken questions by voice, and remembers the terms and passages you want to keep.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "nativeMessaging",
+    "contextMenus",
+    "sidePanel",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*",
+    "https://openrouter.ai/*",
+    "https://api.groq.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "exclude_matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "lib/Readability.js",
+        "lib/common.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "chatgpt-bridge.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "Study Narrator: open panel"
+  },
+  "side_panel": {
+    "default_path": "panel.html"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "read-toggle": {
+      "suggested_key": {
+        "default": "Alt+R"
+      },
+      "description": "Read page / pause"
+    },
+    "ask": {
+      "suggested_key": {
+        "default": "Alt+A"
+      },
+      "description": "Ask a question by voice"
+    },
+    "save-selection": {
+      "suggested_key": {
+        "default": "Alt+S"
+      },
+      "description": "Save selected text to memory"
+    }
+  },
+  "optional_host_permissions": [
+    "<all_urls>"
+  ]
+}

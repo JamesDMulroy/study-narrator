@@ -1,0 +1,16 @@
+# scratch and local records
+.tmp/
+# extension signing keys and packed builds (never commit a private key)
+*.pem
+*.crx
+*.zip
+# secrets and local config
+.env
+.env.*
+config.json
+# runtime
+__pycache__/
+*.pyc
+*.log
+.pytest_cache/
+.playwright-profile*/

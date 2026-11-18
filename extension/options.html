@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Study Narrator settings</title>
+<style>
+  :root { --accent: #4f46e5; --bg: #fff; --fg: #111; --muted: #666; --line: #e5e7eb; --card: #f8f9fb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #16181d; --fg: #eee; --muted: #9aa; --line: #2b2f36; --card: #1f2329; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--fg); max-width: 720px; margin-inline: auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 26px 0 8px; }
+  label { display: block; margin: 10px 0 4px; font-weight: 600; }
+  input, select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }
+  .btn { padding: 8px 14px; border: none; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  .btn.ghost { background: var(--card); color: var(--fg); border: 1px solid var(--line); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .ok { color: #16a34a; } .bad { color: #dc2626; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 500; margin: 8px 0; } .check input { width: auto; }
+  .box { display: none; } .box.on { display: block; }
+</style>
+</head>
+<body>
+<h1>Study Narrator</h1>
+<p class="muted">Reads the important parts of a page, answers your questions by voice, and remembers what you save. Works with any AI you choose below.</p>
+
+<h2>AI</h2>
+<label for="backend">Which AI does the reading and answering?</label>
+<select id="backend">
+  <option value="claude-code">Claude (Claude Code on this PC, your subscription)</option>
+  <option value="codex">ChatGPT via Codex CLI on this PC (your ChatGPT/Codex subscription)</option>
+  <option value="chatgpt-web">ChatGPT web app (drives chatgpt.com in a tab, your ChatGPT login)</option>
+  <option value="anthropic-api">Anthropic API key</option>
+  <option value="openai-api">OpenAI API key, or any OpenAI-compatible endpoint (OpenRouter, Groq, Ollama, LM Studio…)</option>
+  <option value="gemini-api">Google Gemini API key</option>
+</select>
+
+<div class="box" id="box-claude-code">
+  <div class="two">
+    <div><label for="account">Profile</label><input id="account" placeholder="default"></div>
+    <div></div>
+    <div><label for="narrationModel">Narration model</label><select id="narrationModel"><option value="haiku">haiku (fast, cheap)</option><option value="sonnet">sonnet</option><option value="opus">opus</option></select></div>
+    <div><label for="answerModel">Answer model</label><select id="answerModel"><option value="haiku">haiku</option><option value="sonnet">sonnet (recommended)</option><option value="opus">opus</option></select></div>
+  </div>
+</div>
+
+<div class="box" id="box-codex">
+  <div class="two">
+    <div><label for="codexAccount">Profile</label><input id="codexAccount" placeholder="default"></div>
+    <div></div>
+    <div><label for="codexNarrationModel">Narration model</label><input id="codexNarrationModel" placeholder="(Codex default)"></div>
+    <div><label for="codexAnswerModel">Answer model</label><input id="codexAnswerModel" placeholder="(Codex default)"></div>
+  </div>
+  <p class="muted">Runs <code>codex exec</code> in read-only sandbox mode with ephemeral sessions. Model names are the ones your Codex account offers.</p>
+</div>
+
+<div class="box" id="box-chatgpt-web">
+  <div class="card">
+    <p>Study Narrator keeps one pinned <b>chatgpt.com</b> tab and types into the real ChatGPT composer, so ChatGPT sees the page content and your question, and the reply is read back to you. Sign in to ChatGPT in that tab once.</p>
+    <label class="check"><input type="checkbox" id="chatgptTemporary"> Use temporary chats (nothing saved to your ChatGPT history)</label>
+    <div class="row"><button class="btn ghost" id="openChatGPTTab">Open the ChatGPT tab</button><span class="muted">Each new page starts a fresh chat; questions continue in it.</span></div>
+    <div class="row"><button class="btn ghost" id="chatgptDebug">Diagnose the ChatGPT tab</button></div>
+    <pre id="chatgptDebugOut" class="muted" style="white-space:pre-wrap;word-break:break-all"></pre>
+  </div>
+</div>
+
+<div class="box" id="box-anthropic-api">
+  <label for="apiKey">Anthropic API key</label><input id="apiKey" type="password" placeholder="sk-ant-…">
+  <div class="two">
+    <div><label for="apiNarrationModel">Narration model</label><input id="apiNarrationModel"></div>
+    <div><label for="apiAnswerModel">Answer model</label><input id="apiAnswerModel"></div>
+  </div>
+</div>
+
+<div class="box" id="box-openai-api">
+  <label for="openaiBaseUrl">Base URL</label><input id="openaiBaseUrl" placeholder="https://api.openai.com/v1">
+  <p class="muted">Examples: OpenRouter <code>https://openrouter.ai/api/v1</code>, Groq <code>https://api.groq.com/openai/v1</code>, Ollama <code>http://localhost:11434/v1</code>, LM Studio <code>http://localhost:1234/v1</code>. A custom host asks for permission once.</p>
+  <label for="openaiKey">API key (leave blank for local servers)</label><input id="openaiKey" type="password" placeholder="sk-…">
+  <div class="two">
+    <div><label for="openaiNarrationModel">Narration model</label><input id="openaiNarrationModel"></div>
+    <div><label for="openaiAnswerModel">Answer model</label><input id="openaiAnswerModel"></div>
+  </div>
+</div>
+
+<div class="box" id="box-gemini-api">
+  <label for="geminiKey">Gemini API key</label><input id="geminiKey" type="password" placeholder="AIza…">
+  <div class="two">
+    <div><label for="geminiNarrationModel">Narration model</label><input id="geminiNarrationModel"></div>
+    <div><label for="geminiAnswerModel">Answer model</label><input id="geminiAnswerModel"></div>
+  </div>
+</div>
+
+<div class="row" style="margin-top:12px"><button class="btn ghost" id="testBtn">Save and test this AI</button><span id="testStatus" class="muted"></span></div>
+
+<h2>Voice</h2>
+<label for="voice">Voice</label>
+<select id="voice"></select>
+<p class="muted">Edge's "Online (Natural)" voices sound best. The top entry is the automatic pick.</p>
+<label for="rate">Speed</label>
+<div class="row"><input id="rate" type="range" min="0.7" max="1.8" step="0.05" style="flex:1"><span id="rateVal"></span><button class="btn ghost" id="testVoice">Test voice</button></div>
+<label class="check"><input type="checkbox" id="autoResume"> Resume reading automatically after an answer</label>
+<label for="style">Narration</label>
+<select id="style"><option value="focused">Important parts (skip furniture, keep every fact)</option><option value="full">Everything, cleaned up for listening</option></select>
+<div class="two">
+  <div><label for="side">Widget position</label><select id="side"><option value="right">Bottom right</option><option value="left">Bottom left</option></select></div>
+  <div><label>&nbsp;</label><label class="check" style="margin:0"><input type="checkbox" id="widgetEnabled"> Show the floating widget</label></div>
+</div>
+<div class="row"><button class="btn ghost" id="resetWidget">Reset widget position and un-hide all sites</button><span id="resetStatus" class="muted"></span></div>
+<div class="card">
+  <p class="muted">After an update, pages that were already open keep the old widget until refreshed. Allow the extension to update the widget in open tabs (an "all sites" permission used only for that) and it happens automatically.</p>
+  <div class="row"><button class="btn" id="allowAllSites">Allow updating the widget in open tabs</button><span id="allSitesStatus" class="muted"></span></div>
+</div>
+<div class="two" style="display:none">
+</div>
+
+<h2>Microphone</h2>
+<div class="card">
+  <p class="muted">Web pages ask once per site. The side panel (voice quiz, chat) uses the extension's own permission; grant it here.</p>
+  <div class="row"><button class="btn" id="micBtn">Allow microphone for the extension</button><span id="micStatus" class="muted"></span></div>
+</div>
+
+<div class="row" style="margin-top:22px"><button class="btn" id="save">Save settings</button><span id="saved" class="muted"></span></div>
+<p class="muted">Shortcuts: Alt+R read/pause, Alt+A ask, Alt+S save highlight. Change them at edge://extensions/shortcuts. Right-click any page for "Discuss this page in ChatGPT / Claude.ai".</p>
+<script src="lib/common.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

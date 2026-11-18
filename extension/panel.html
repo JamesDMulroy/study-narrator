@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Study Narrator</title>
+<style>
+  :root { --accent: #4f46e5; --bg: #fff; --fg: #111; --muted: #666; --line: #e5e7eb; --card: #f8f9fb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #16181d; --fg: #eee; --muted: #9aa; --line: #2b2f36; --card: #1f2329; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--fg); }
+  header { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 2; }
+  header button { flex: 1; padding: 7px 4px; border: none; background: transparent; color: var(--muted); border-radius: 8px; cursor: pointer; font-weight: 600; }
+  header button.on { background: var(--accent); color: #fff; }
+  main { padding: 10px; }
+  section { display: none; } section.on { display: block; }
+  input, textarea, select { width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+  textarea { min-height: 54px; resize: vertical; }
+  .row { display: flex; gap: 6px; align-items: center; margin: 6px 0; flex-wrap: wrap; }
+  .btn { padding: 7px 11px; border: none; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+  .btn.ghost { background: var(--card); color: var(--fg); border: 1px solid var(--line); }
+  .btn.live { background: #dc2626; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .note { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; }
+  .note .t { font-weight: 600; }
+  .note .d { color: var(--fg); margin-top: 3px; white-space: pre-wrap; }
+  .note .m { color: var(--muted); font-size: 12px; margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .note .m a { color: var(--accent); text-decoration: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .note .tools { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .note .tools button { font-size: 12px; padding: 4px 8px; }
+  .tag { background: var(--line); border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 10px 0; min-height: 90px; white-space: pre-wrap; }
+  .card.q { border-left: 4px solid var(--accent); }
+  .chat { max-height: 60vh; overflow: auto; }
+  .msg { padding: 8px 10px; border-radius: 10px; margin: 6px 0; white-space: pre-wrap; }
+  .msg.user { background: var(--card); }
+  .msg.assistant { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+  .err { color: #dc2626; font-size: 12px; }
+  .grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .grades button { padding: 8px 2px; }
+</style>
+</head>
+<body>
+<header>
+  <button data-tab="notes" class="on">Memory</button>
+  <button data-tab="review">Review</button>
+  <button data-tab="chat">Chat</button>
+  <button data-tab="more">⋯</button>
+</header>
+<main>
+  <section id="notes" class="on">
+    <div class="row"><input id="search" placeholder="Search memory…"><select id="tagFilter" style="width:auto"><option value="">All</option></select></div>
+    <div class="row">
+      <input id="newText" placeholder="Add a term or something to remember…">
+      <button class="btn" id="addBtn">Add</button>
+    </div>
+    <div class="muted" id="count"></div>
+    <div id="list"></div>
+  </section>
+
+  <section id="review">
+    <div class="muted" id="dueInfo"></div>
+    <div class="row"><button class="btn" id="startReview">Start review</button><button class="btn ghost" id="quizVoice">🎤 Quiz me by voice</button><button class="btn ghost" id="stopSpeak">Stop voice</button></div>
+    <div id="reviewArea"></div>
+  </section>
+
+  <section id="chat">
+    <div class="muted">Ask about the page in the active tab. The answer is spoken and shown here.</div>
+    <div class="row"><input id="chatQ" placeholder="Ask a question…"><button class="btn" id="chatSend">Ask</button><button class="btn ghost" id="chatMic">🎤</button></div>
+    <div class="err" id="chatErr"></div>
+    <div class="chat" id="chatLog"></div>
+    <div class="row"><button class="btn ghost" id="clearChat">Clear history</button></div>
+  </section>
+
+  <section id="more">
+    <div class="row"><button class="btn" id="exportMd">Export memory as Markdown</button><button class="btn ghost" id="exportJson">Export JSON</button></div>
+    <div class="row"><label class="btn ghost" for="importFile">Import JSON</label><input type="file" id="importFile" accept="application/json" style="display:none"></div>
+    <div class="row"><button class="btn ghost" id="openOptions">Settings (voice, Claude backend)</button></div>
+    <div class="row"><button class="btn ghost" id="readSel">Read highlighted text on the page</button></div>
+    <div class="row"><button class="btn ghost" id="showWidget">Show the widget on this page</button><button class="btn ghost" id="resetWidget">Reset widget position</button></div>
+    <p class="muted">The widget can be dragged anywhere by its ⠿ grip, minimized with 🎧, and hidden with ✕. Right-click a page to hide it on that site.</p>
+    <p class="muted">Shortcuts on any page: Alt+R read/pause, Alt+A ask by voice, Alt+S save highlighted text. Right-click highlighted text for save, explain and read.</p>
+    <p class="muted" id="hostInfo"></p>
+  </section>
+</main>
+<script src="lib/common.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>
