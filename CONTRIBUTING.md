@@ -22,7 +22,7 @@ Thanks for helping improve Study Narrator.
 3. Run the checks:
    ```
    python -m pip install pytest playwright
-   python -m pytest tests/test_host.py tests/test_install.py
+   python -m pytest tests/test_host.py tests/test_install.py tests/test_background.py
    python tests/test_widget.py
    python tests/test_takeover.py
    python tests/test_isolation.py

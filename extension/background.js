@@ -250,9 +250,10 @@ async function cachePut(key, value) {
   await chrome.storage.local.set({ narrationCache: cache });
 }
 
-async function prepareNarration(port, { title, url, text }) {
+async function prepareNarration(port, { title, url, text }, isClosed = () => false) {
   const s = await SN.getSettings();
-  const key = SN.hash(url + '|' + s.narrationStyle + '|' + text.length + '|' + text.slice(0, 2000));
+  // Full-text SHA-256: a page cannot craft a key that collides with another page's cached narration.
+  const key = 'n2:' + await SN.sha256(JSON.stringify([url, s.narrationStyle, text]));
   const cached = await cacheGet(key);
   if (cached) {
     port.postMessage({ type: 'chunk', index: 0, total: 1, script: cached.script, terms: cached.terms, cached: true });
@@ -262,6 +263,7 @@ async function prepareNarration(port, { title, url, text }) {
   const chunks = chunkText(text);
   const all = { script: [], terms: [] };
   for (let i = 0; i < chunks.length; i++) {
+    if (isClosed()) return; // the page went away: make no further AI call for it
     const prompt = `Page title: ${title}\nURL: ${url}\nPart ${i + 1} of ${chunks.length}.\n\n<page_text>\n${chunks[i]}\n</page_text>`;
     let script = '', terms = [];
     try {
@@ -286,7 +288,7 @@ async function prepareNarration(port, { title, url, text }) {
 const RATE_LIMITS = { ask: { max: 10, perMs: 60000 }, explain: { max: 10, perMs: 60000 }, prepare: { max: 4, perMs: 60000 } };
 const MAX_PREPARE_CHARS = 70000; // content.js sends at most 60,000 characters plus a short note
 const recentCalls = new Map(); // `${kind}:${tabId}` -> timestamps
-const preparing = new Set(); // tab IDs with a narration in progress
+const preparing = new Map(); // tab ID -> the port whose narration is in progress
 function overLimit(kind, tabId) {
   if (tabId == null || !RATE_LIMITS[kind]) return false;
   const { max, perMs } = RATE_LIMITS[kind];
@@ -310,11 +312,15 @@ chrome.runtime.onConnect.addListener((port) => {
     if (typeof msg.text !== 'string' || msg.text.length > MAX_PREPARE_CHARS) return fail('This page is too long to narrate.');
     if (tabId != null && preparing.has(tabId)) return fail('A narration is already being prepared for this tab.');
     if (overLimit('prepare', tabId)) return fail('Too many narration requests from this tab. Wait a minute and try again.');
-    if (tabId != null) preparing.add(tabId);
-    prepareNarration(port, { title: String(msg.title || ''), url: String(msg.url || ''), text: msg.text })
+    if (tabId != null) preparing.set(tabId, port);
+    prepareNarration(port, { title: String(msg.title || ''), url: String(msg.url || ''), text: msg.text }, () => closed)
       .catch(e => fail(String(e.message || e)))
-      .finally(() => { if (tabId != null) preparing.delete(tabId); });
+      .finally(() => release());
   });
+  // The tab navigated or closed the widget: free the tab at once and stop the chunk loop.
+  let closed = false;
+  const release = () => { if (tabId != null && preparing.get(tabId) === port) preparing.delete(tabId); };
+  port.onDisconnect.addListener(() => { closed = true; release(); });
 });
 
 // ---------- tab context (page script for the side panel) ----------

@@ -130,6 +130,12 @@
     return (h >>> 0).toString(36);
   };
 
+  // SHA-256 hex digest; used where a collision would matter (the narration cache key).
+  SN.sha256 = async (str) => {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str ?? '')));
+    return Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+  };
+
   SN.escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   root.SN = SN;
