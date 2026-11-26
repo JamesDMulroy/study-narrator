@@ -26,17 +26,55 @@
     widgetSide: 'right',
   };
 
+  SN.SECRET_KEYS = ['apiKey', 'openaiKey', 'geminiKey'];
+
+  SN.validBaseUrl = (u) => {
+    try {
+      const url = new URL(u);
+      return url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname));
+    } catch (_) { return false; }
+  };
+
   SN.uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
   SN.getSettings = async () => {
     const got = await chrome.storage.local.get('settings');
-    return Object.assign({}, SN.DEFAULTS, got.settings || {});
+    const settings = Object.assign({}, SN.DEFAULTS, got.settings || {});
+    for (const key of SN.SECRET_KEYS) delete settings[key];
+    return settings;
   };
   SN.saveSettings = async (patch) => {
     const cur = await SN.getSettings();
-    const next = Object.assign({}, cur, patch);
+    const safePatch = Object.assign({}, patch);
+    for (const key of SN.SECRET_KEYS) delete safePatch[key];
+    const next = Object.assign({}, cur, safePatch);
     await chrome.storage.local.set({ settings: next });
     return next;
+  };
+
+  SN.getSecrets = async () => {
+    const got = await chrome.storage.local.get(['settings', 'secrets']);
+    const settings = Object.assign({}, got.settings || {});
+    const secrets = Object.assign({ apiKey: '', openaiKey: '', geminiKey: '' }, got.secrets || {});
+    let migrated = false;
+    for (const key of SN.SECRET_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(settings, key)) {
+        if (!got.secrets || !Object.prototype.hasOwnProperty.call(got.secrets, key)) secrets[key] = settings[key];
+        delete settings[key];
+        migrated = true;
+      }
+    }
+    if (migrated) await chrome.storage.local.set({ settings, secrets });
+    return secrets;
+  };
+  SN.saveSecrets = async (patch) => {
+    const got = await chrome.storage.local.get('secrets');
+    const secrets = Object.assign({ apiKey: '', openaiKey: '', geminiKey: '' }, got.secrets || {});
+    for (const key of SN.SECRET_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(patch || {}, key)) secrets[key] = patch[key];
+    }
+    await chrome.storage.local.set({ secrets });
+    return secrets;
   };
 
   // Split narration text into speakable sentences (keeps them short so the browser's TTS never stalls).

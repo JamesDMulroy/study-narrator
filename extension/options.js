@@ -29,10 +29,11 @@ function showBackendBox() {
 
 async function load() {
   settings = await SN.getSettings();
+  const secrets = await SN.getSecrets();
   if (settings.backend === 'native') settings.backend = 'claude-code';
   if (settings.backend === 'api') settings.backend = 'anthropic-api';
   fillVoices();
-  for (const id of FIELDS.text) $('#' + id).value = settings[key(id)] ?? '';
+  for (const id of FIELDS.text) $('#' + id).value = ['apiKey', 'openaiKey', 'geminiKey'].includes(id) ? (secrets[id] ?? '') : (settings[key(id)] ?? '');
   for (const id of FIELDS.select) $('#' + id).value = settings[key(id)] ?? '';
   for (const id of FIELDS.check) $('#' + id).checked = !!settings[key(id)];
   $('#rate').value = settings.rate; $('#rateVal').textContent = settings.rate + '×';
@@ -61,11 +62,15 @@ async function ensureHostPermission(baseUrl) {
 
 async function save() {
   const s = collect();
+  const secrets = {};
+  for (const id of ['apiKey', 'openaiKey', 'geminiKey']) secrets[id] = s[id];
+  for (const id of ['apiKey', 'openaiKey', 'geminiKey']) delete s[id];
   if (s.backend === 'openai-api') {
     const ok = await ensureHostPermission(s.openaiBaseUrl);
     if (!ok) { $('#saved').textContent = 'Saved, but permission for that endpoint was not granted.'; }
   }
   await SN.saveSettings(s);
+  await SN.saveSecrets(secrets);
   $('#saved').textContent = $('#saved').textContent || 'Saved.'; setTimeout(() => { $('#saved').textContent = ''; }, 2500);
   return s;
 }
@@ -92,7 +97,7 @@ $('#testBtn').addEventListener('click', async () => {
 });
 
 $('#chatgptDebug').addEventListener('click', async () => { $('#chatgptDebugOut').textContent = 'DEBUG: …'; const r = await send({ type: 'chatgptDebug' }); $('#chatgptDebugOut').textContent = 'DEBUG: ' + JSON.stringify(r); });
-$('#openChatGPTTab').addEventListener('click', () => chrome.tabs.create({ url: 'https://chatgpt.com/?temporary-chat=true', pinned: true, active: true }));
+$('#openChatGPTTab').addEventListener('click', () => send({ type: 'openChatGPTTab' }));
 
 $('#testVoice').addEventListener('click', () => {
   speechSynthesis.cancel();

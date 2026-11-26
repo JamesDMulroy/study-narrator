@@ -3,6 +3,8 @@
 ## What runs where
 - **The extension** runs in your browser. Settings, notes and API keys are kept in the browser's extension
   storage on your computer. Page text is sent only to the AI backend you choose.
+- API keys are kept apart from the settings that content scripts load. This is defence in depth; it does not
+  protect against a fully compromised browser.
 - **The native host** (`host/host.py`) runs only when the browser starts it, and only for the extension
   IDs you registered with `host/install.py`. It opens no network port. Its only actions are `ping`,
   `claude` and `codex`. It passes page text to the AI tool on stdin, never on a command line. It checks
@@ -18,8 +20,11 @@
 
 ## Prompt injection
 The AI reads the text of the pages you open. A page can contain text written to mislead an AI.
-- With the **API backends** and **ChatGPT web**, the AI has no tools and no actions here, so the worst
-  outcome is a misleading narration or answer.
+- With the **API backends**, the AI has no tools and no actions here, so the worst outcome is a misleading
+  narration or answer.
+- **ChatGPT web** runs with the signed-in account's features, including web search and, when temporary chat is
+  off, memory and connectors. Injected page text could steer those features. Keep **Use temporary chats** on
+  and do not use ChatGPT web on untrusted pages.
 - With **Claude Code**, the host removes the built-in tools and loads no MCP server or connector, so the
   same holds.
 - With **Codex**, `codex exec -s read-only` still lets the model run commands that *read* files your
@@ -34,8 +39,8 @@ Treat answers about untrusted pages with the same care as the page itself.
 Security fixes go to the latest version on the default branch.
 
 ## Reporting a vulnerability
-Please report vulnerabilities privately by email to **hello@jamesmulroy.com**. Do not open a public
-issue. Include:
+Please report vulnerabilities privately by email to **hello@jamesmulroy.com**, or use GitHub private
+vulnerability reporting on github.com/JamesDMulroy/study-narrator. Do not open a public issue. Include:
 - the browser and its version;
 - the backend you used;
 - the steps to reproduce;

@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -45,12 +46,14 @@ def data_dir() -> Path:
 
 def write_launcher(folder: Path) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
+    host_copy = folder / "host.py"
+    shutil.copy2(HOST_PY, host_copy)
     if os.name == "nt":
         launcher = folder / "host.cmd"
-        launcher.write_text(f'@echo off\r\n"{sys.executable}" -I "{HOST_PY}"\r\n', encoding="utf-8")
+        launcher.write_text(f'@echo off\r\n"{sys.executable}" -I "{host_copy}"\r\n', encoding="utf-8")
     else:
         launcher = folder / "host.sh"
-        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" -I "{HOST_PY}"\n', encoding="utf-8")
+        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" -I "{host_copy}"\n', encoding="utf-8")
         launcher.chmod(launcher.stat().st_mode | stat.S_IXUSR)
     return launcher
 
@@ -101,7 +104,7 @@ def uninstall() -> list[str]:
                 path.unlink()
                 removed.append(str(path))
     folder = data_dir()
-    for name in ("host.cmd", "host.sh", f"{HOST_NAME}.json"):
+    for name in ("host.cmd", "host.sh", "host.py", f"{HOST_NAME}.json"):
         if (folder / name).exists():
             (folder / name).unlink()
             removed.append(str(folder / name))

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import pytest
 
 HOST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "host", "host.py")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -31,59 +32,62 @@ def call(msg, env=None, timeout=240):
     return call_raw(struct.pack("=I", len(data)) + data, env=env, timeout=timeout)
 
 
-def _env(config: dict | None = None):
-    env = dict(os.environ)
-    folder = tempfile.mkdtemp(prefix="sn-host-test-")
-    path = os.path.join(folder, "config.json")
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(config or {}, f)
-    env["STUDY_NARRATOR_CONFIG"] = path
-    env["STUDY_NARRATOR_DATA"] = folder  # keep test logs out of the real data folder
-    return env
+@pytest.fixture
+def env_factory(tmp_path):
+    def make_env(config: dict | None = None):
+        folder = str(tmp_path)
+        path = os.path.join(folder, "config.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(config or {}, f)
+        env = dict(os.environ)
+        env["STUDY_NARRATOR_CONFIG"] = path
+        env["STUDY_NARRATOR_DATA"] = folder
+        return env
+    return make_env
 
 
-def test_ping_reports_version_and_profiles():
-    r = call({"action": "ping", "id": 7}, env=_env({"claude_profiles": {"work": {"CLAUDE_CONFIG_DIR": "x"}}}))
+def test_ping_reports_version_and_profiles(env_factory):
+    r = call({"action": "ping", "id": 7}, env=env_factory({"claude_profiles": {"work": {"CLAUDE_CONFIG_DIR": "x"}}}))
     assert r["ok"] and r["id"] == 7 and r["version"]
     assert r["claude_profiles"] == ["default", "work"]
 
 
-def test_unknown_action_is_refused():
-    r = call({"action": "shell", "prompt": "x"}, env=_env())
+def test_unknown_action_is_refused(env_factory):
+    r = call({"action": "shell", "prompt": "x"}, env=env_factory())
     assert r["ok"] is False and "unknown action" in r["error"]
 
 
-def test_model_names_are_validated():
-    r = call({"action": "claude", "model": "haiku & calc", "prompt": "x"}, env=_env())
+def test_model_names_are_validated(env_factory):
+    r = call({"action": "claude", "model": "haiku & calc", "prompt": "x"}, env=env_factory())
     assert r["ok"] is False and "invalid model" in r["error"]
 
 
-def test_profiles_must_be_configured():
-    r = call({"action": "claude", "account": "someone-else", "prompt": "x"}, env=_env())
+def test_profiles_must_be_configured(env_factory):
+    r = call({"action": "claude", "account": "someone-else", "prompt": "x"}, env=env_factory())
     assert r["ok"] is False and "unknown claude profile" in r["error"]
 
 
-def test_profiles_may_only_set_the_config_folder():
+def test_profiles_may_only_set_the_config_folder(env_factory):
     cfg = {"claude_profiles": {"evil": {"PATH": "x"}}}
-    r = call({"action": "claude", "account": "evil", "prompt": "x"}, env=_env(cfg))
+    r = call({"action": "claude", "account": "evil", "prompt": "x"}, env=env_factory(cfg))
     assert r["ok"] is False and "only" in r["error"]
 
 
-def test_oversized_messages_are_refused():
-    r = call_raw(struct.pack("=I", 64 * 1024 * 1024) + b"{}", env=_env())
+def test_oversized_messages_are_refused(env_factory):
+    r = call_raw(struct.pack("=I", 64 * 1024 * 1024) + b"{}", env=env_factory())
     assert r["ok"] is False and "too large" in r["error"]
 
 
-def test_missing_cli_is_reported():
-    cfg = {"claude_path": os.path.join(tempfile.gettempdir(), "no-such-claude.exe")}
-    r = call({"action": "claude", "prompt": "x"}, env=_env(cfg))
+def test_missing_cli_is_reported(env_factory, tmp_path):
+    cfg = {"claude_path": os.path.join(str(tmp_path), "no-such-claude.exe")}
+    r = call({"action": "claude", "prompt": "x"}, env=env_factory(cfg))
     assert r["ok"] is False and "not found" in r["error"]
 
 
-def test_claude_runs_without_tools_or_mcp_servers():
+def test_claude_runs_without_tools_or_mcp_servers(env_factory, tmp_path):
     """The Claude Code call removes built-in tools and loads no MCP server from the user's configuration, so page
     text cannot reach the user's connectors. A stand-in CLI echoes the arguments it was given."""
-    folder = tempfile.mkdtemp(prefix="sn-fake-cli-")
+    folder = str(tmp_path)
     script = os.path.join(folder, "fake_claude.py")
     with open(script, "w", encoding="utf-8") as f:
         f.write("import json, sys\nsys.stdin.read()\nprint(json.dumps({'result': json.dumps(sys.argv[1:])}))\n")
@@ -96,11 +100,16 @@ def test_claude_runs_without_tools_or_mcp_servers():
         with open(exe, "w", encoding="utf-8") as f:
             f.write(f'#!/bin/sh\nexec "{sys.executable}" -I "{script}" "$@"\n')
         os.chmod(exe, 0o755)
-    r = call({"action": "claude", "prompt": "x", "system": "y"}, env=_env({"claude_path": exe}), timeout=60)
+    r = call({"action": "claude", "prompt": "x", "system": "y"}, env=env_factory({"claude_path": exe}), timeout=60)
     assert r["ok"], r
     argv = json.loads(r["text"])
     assert "--strict-mcp-config" in argv and "--mcp-config" not in argv
     assert argv[argv.index("--tools") + 1] == ""
+
+
+def test_truncated_message_is_refused(env_factory):
+    r = call_raw(struct.pack("=I", 100) + b"{}", env=env_factory())
+    assert r["ok"] is False and "incomplete" in r["error"]
 
 
 if __name__ == "__main__":

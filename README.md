@@ -59,6 +59,10 @@ You can stop and ask a question by voice at any point, and the answer is grounde
    ```
    git clone https://git.bastionary.com/james/study-narrator.git
    ```
+   You can use either this repository or the GitHub mirror:
+   ```
+   git clone https://github.com/JamesDMulroy/study-narrator.git
+   ```
 2. Load the extension:
    1. Open `edge://extensions` (or `chrome://extensions`) and turn on **Developer mode**.
    2. Click **Load unpacked** and choose the `extension` folder.
@@ -72,6 +76,8 @@ You can stop and ask a question by voice at any point, and the answer is grounde
    removes it.
 4. Open the extension's **Settings** (right-click the toolbar icon > Extension options), pick a backend,
    then click **Save and test this AI**.
+
+Tabs that were already open need a refresh before the widget appears.
 
 ## Quick start
 
@@ -135,7 +141,7 @@ and **Diagnose the ChatGPT tab** in Settings shows what the bridge sees.
 | `activeTab`, `tabs`, `scripting` | Find the active tab and talk to its widget. Re-inject the widget into open tabs after an update. |
 | `contextMenus`, `sidePanel` | The right-click entries and the notes panel. |
 | `nativeMessaging` | The Claude Code and Codex backends. |
-| `host_permissions` for the AI APIs, `localhost`, `127.0.0.1` and `chatgpt.com` | Calls to the backend you choose, local model servers, and the ChatGPT bridge. |
+| `host_permissions` for the AI APIs and `chatgpt.com` | Calls to the backend you choose and the ChatGPT bridge. Local servers and other OpenAI-compatible hosts are requested once when you save that endpoint in Settings. |
 | Optional: all sites | Asked only if you enable "Allow updating the widget in open tabs", or use a custom API endpoint. |
 
 API keys are stored in the browser's extension storage on your computer. They are sent only to the API
@@ -143,17 +149,24 @@ you configured.
 
 ## Tests
 
+Prerequisites: Microsoft Edge must be installed (on Linux or macOS, install it with `python -m playwright install msedge`). Node 18 or newer is required for `tests/test_background.py` and the other Node-harness tests.
+
 ```
 python -m pip install pytest playwright
-python -m pytest tests/test_host.py tests/test_install.py   # offline: host protocol, validation, installer
+python -m pytest tests -q                                  # offline
 python tests/test_widget.py                                  # headless Edge: widget drag/minimize/hide/restore
 python tests/test_takeover.py                                # headless Edge: a new build replaces an old widget
 python tests/test_isolation.py                               # headless Edge: pages cannot drive or read the widget
+python tests/test_shipped_manifest.py                         # headless Edge: the shipped manifest, without all-sites access
 python tests/test_extension.py                               # headless Edge + registered host + Claude Code
 python tests/test_host.py --claude                           # a live round trip through your Claude login
 ```
 
 The browser tests use a throwaway profile in headless Edge (`channel="msedge"`). No window opens.
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md) for what Study Narrator stores and where its data goes.
 
 ## Layout
 
@@ -168,6 +181,8 @@ The browser tests use a throwaway profile in headless Edge (`channel="msedge"`).
 - **`host/host.py`:** the native-messaging host. Its only actions are `ping`, `claude` and `codex`.
 - **`host/install.py`:** registers or removes the host for the current user.
 - **`tests/`:** host and installer unit tests, and headless browser tests.
+- **`tools/package.py`:** builds `dist/study-narrator-<version>.zip` from `extension/`, the same bytes every
+  time, for a store upload or a release download. Run `python tools/package.py`.
 
 ## License
 

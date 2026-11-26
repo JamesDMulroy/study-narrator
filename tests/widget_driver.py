@@ -6,7 +6,9 @@ cannot reach) and click or type with real input events through Playwright's mous
 """
 import functools
 import http.server
+import json
 import os
+import shutil
 import socketserver
 import threading
 import time
@@ -41,11 +43,24 @@ def serve(folder):
     return srv, f"http://127.0.0.1:{srv.server_address[1]}"
 
 
-def launch(p, profile, **kwargs):
+def launch(p, profile, *, grant_all_sites=True, **kwargs):
     """Headless Edge with only this extension, in a throwaway profile. Returns (context, service worker)."""
+    extension_path = EXT
+    if grant_all_sites:
+        extension_path = os.path.join(os.path.dirname(profile), "extension-under-test")
+        if os.path.exists(extension_path):
+            shutil.rmtree(extension_path)
+        shutil.copytree(EXT, extension_path)
+        manifest_path = os.path.join(extension_path, "manifest.json")
+        with open(manifest_path, encoding="utf-8") as manifest_file:
+            manifest = json.load(manifest_file)
+        # Simulate a user who granted all-sites access in Settings.
+        manifest.setdefault("host_permissions", []).append("<all_urls>")
+        with open(manifest_path, "w", encoding="utf-8") as manifest_file:
+            json.dump(manifest, manifest_file, ensure_ascii=False, indent=2)
     ctx = p.chromium.launch_persistent_context(
         profile, channel="msedge", headless=True,
-        args=[f"--disable-extensions-except={EXT}", f"--load-extension={EXT}", "--no-first-run", "--mute-audio"],
+        args=[f"--disable-extensions-except={extension_path}", f"--load-extension={extension_path}", "--no-first-run", "--mute-audio"],
         **kwargs)
     def ours(w):
         return w.url.startswith("chrome-extension://") and w.url.endswith("/background.js")

@@ -95,7 +95,10 @@ def read_message():
     (n,) = struct.unpack("=I", raw)
     if n > MAX_MESSAGE:
         raise ValueError(f"message too large ({n} bytes)")
-    msg = json.loads(sys.stdin.buffer.read(n).decode("utf-8"))
+    body = sys.stdin.buffer.read(n)
+    if len(body) != n:
+        raise ValueError("incomplete message")
+    msg = json.loads(body.decode("utf-8"))
     if not isinstance(msg, dict):
         raise ValueError("message must be a JSON object")
     return msg

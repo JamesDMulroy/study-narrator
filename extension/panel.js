@@ -48,7 +48,7 @@ function renderList() {
   const shown = notes.filter(n => (!tag || (n.tags || []).includes(tag)) && (!q || [n.term, n.text, n.definition, n.note, n.title, ...(n.tags || [])].join(' ').toLowerCase().includes(q)));
   $('#count').textContent = `${shown.length} of ${notes.length} saved` + (notes.length ? ` · ${notes.filter(n => (n.srs?.due || 0) <= Date.now()).length} due for review` : '');
   const list = $('#list'); list.innerHTML = '';
-  if (!notes.length) { list.innerHTML = '<p class="muted">Nothing saved yet. Highlight text on any page and press Alt+S, use the ★ Save button, or right-click a selection. Key terms Claude finds while reading can be saved with one click.</p>'; return; }
+  if (!notes.length) { list.innerHTML = '<p class="muted">Nothing saved yet. Highlight text on any page and press Alt+S, use the ★ Save button, or right-click a selection. Key terms the AI finds while reading can be saved with one click.</p>'; return; }
   for (const n of shown) {
     const d = document.createElement('div'); d.className = 'note'; d.dataset.id = n.id;
     const title = n.term || (n.kind === 'card' ? 'Card' : n.kind === 'note' ? 'Note' : 'Highlight');
@@ -114,7 +114,7 @@ async function voiceQuiz() {
   const pool = due().length ? due() : notes;
   current = pool[Math.floor(Math.random() * pool.length)];
   const area = $('#reviewArea');
-  area.innerHTML = '<div class="card">Claude is writing a question…</div>';
+  area.innerHTML = '<div class="card">Writing a question…</div>';
   const q = await send({ type: 'quizQuestion', note: current });
   if (!q || q.error || !q.question) { area.innerHTML = `<div class="err">${SN.escapeHtml(q?.error || 'Could not get a question')}</div>`; return; }
   area.innerHTML = `<div class="card q">${SN.escapeHtml(q.question)}</div><div class="card" id="ans">Listening after the question…</div><div class="row"><button class="btn live" id="mic">● Listening</button><button class="btn ghost" id="skip">Skip</button></div><div class="row"><input id="typed" placeholder="…or type your answer"><button class="btn" id="typedSend">Send</button></div>`;
@@ -180,7 +180,16 @@ $('#exportMd').addEventListener('click', () => {
 $('#exportJson').addEventListener('click', () => download('study-narrator-memory.json', JSON.stringify(notes, null, 2), 'application/json'));
 $('#importFile').addEventListener('change', async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try { const arr = JSON.parse(await f.text()); let added = 0; for (const n of arr) { const r = await send({ type: 'saveNote', note: n }); if (r && !r.duplicate && !r.error) added++; } alert(`Imported ${added} items`); await load(); } catch (err) { alert('Import failed: ' + err.message); }
+  try {
+    const arr = JSON.parse(await f.text());
+    if (!Array.isArray(arr)) { alert('Import failed: the file must be a JSON array of notes'); return; }
+    let added = 0;
+    for (const n of arr) {
+      if (!n || typeof n !== 'object' || Array.isArray(n)) continue;
+      const r = await send({ type: 'saveNote', note: n }); if (r && !r.duplicate && !r.error) added++;
+    }
+    alert(`Imported ${added} items`); await load();
+  } catch (err) { alert('Import failed: ' + err.message); }
 });
 $('#openOptions').addEventListener('click', () => chrome.runtime.openOptionsPage());
 $('#showWidget').addEventListener('click', () => send({ type: 'toTab', payload: { type: 'command', command: 'showWidget' } }));

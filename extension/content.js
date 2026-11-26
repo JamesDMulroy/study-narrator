@@ -294,7 +294,7 @@
     const page = extractPage();
     if (!page.text) { setError('Nothing readable on this page.'); return; }
     S.preparing = true; S.prepared = false; S.sentences = []; S.idx = 0; S.terms = [];
-    setStatus('Claude is preparing the narration…'); setText('Reading the page and picking out what matters. The first part starts in a few seconds.');
+    setStatus('Preparing the narration…'); setText('Reading the page and picking out what matters. The first part starts in a few seconds.');
     let port;
     try { port = chrome.runtime.connect({ name: 'narrate' }); }
     catch (e) { S.preparing = false; S.playing = false; updateButtons(); setStatus('Reload needed'); setError('Study Narrator was updated. Reload this page (F5) to continue.'); return; }
@@ -311,10 +311,10 @@
         if (wasEmpty && S.playing) playFrom(0);
         else if (S.waiting && S.playing) { S.waiting = false; playFrom(S.idx); }
       } else if (m.type === 'error') {
-        setError('Claude: ' + m.error + (m.index != null ? ' (reading that part as plain text instead)' : ''));
+        setError('AI: ' + m.error + (m.index != null ? ' (reading that part as plain text instead)' : ''));
       } else if (m.type === 'done') {
         S.prepared = true; S.preparing = false;
-        if (!S.sentences.length) { setStatus('Nothing to read'); setText('Claude found no substantive content on this page.'); S.playing = false; updateButtons(); }
+        if (!S.sentences.length) { setStatus('Nothing to read'); setText('The AI found no substantive content on this page.'); S.playing = false; updateButtons(); }
         try { port.disconnect(); } catch (_) { /* ignore */ }
       }
     });
@@ -401,14 +401,14 @@
     if (!question) return;
     if (S.playing) { S.resumeAfter = !!S.settings.autoResume; S.playing = false; S.waiting = false; stopSpeech(); }
     S.thinking = true; updateButtons();
-    setStatus('Claude is thinking…'); setText('You asked: ' + question); setError('');
+    setStatus('Thinking…'); setText('You asked: ' + question); setError('');
     const context = { title: S.title, url: S.url, script: S.sentences.length ? S.sentences.join(' ') : (S.rawText || extractPage().text), current: S.sentences[S.idx] || '' };
     const r = await send({ type: 'ask', question, context, history: S.history });
     S.thinking = false; updateButtons();
     if (!r || r.error) { setError(r?.error || 'No answer'); setStatus('Error'); maybeResume(); return; }
     S.history.push({ role: 'user', text: question }, { role: 'assistant', text: r.answer });
     S.history = S.history.slice(-16);
-    setStatus('Claude'); setText(r.answer, 'answer');
+    setStatus('Answer'); setText(r.answer, 'answer');
     setActions([{ label: '🎤 Follow up', fn: startListening }, { label: 'Repeat', ghost: true, fn: () => speakAnswer(r.answer) }, { label: '★ Save answer', ghost: true, fn: async () => { const s = await send({ type: 'saveNote', note: { kind: 'note', text: r.answer, note: 'Q: ' + question, url: S.url, title: S.title, tags: ['answer'] } }); toast(s?.duplicate ? 'Already saved' : 'Answer saved'); } }]);
     speakAnswer(r.answer);
   }
@@ -427,18 +427,18 @@
     if (r?.error) { setError(r.error); return; }
     toast(r.duplicate ? 'Already in memory' : 'Saved to memory');
     setStatus('Saved'); setText(text);
-    setActions([{ label: 'Explain with Claude', fn: () => explainText(text, r.note?.id) }, { label: 'Read it', ghost: true, fn: () => readSelection(text) }]);
+    setActions([{ label: 'Explain with AI', fn: () => explainText(text, r.note?.id) }, { label: 'Read it', ghost: true, fn: () => readSelection(text) }]);
   }
   async function explainText(text, noteId) {
     if (!text) return;
     if (S.playing) { S.resumeAfter = !!S.settings.autoResume; S.playing = false; stopSpeech(); }
-    setStatus('Claude is explaining…'); setText(text); setError('');
+    setStatus('Explaining…'); setText(text); setError('');
     const context = { title: S.title, url: S.url, script: S.sentences.length ? S.sentences.join(' ') : (S.rawText || extractPage().text) };
     const r = await send({ type: 'explain', text, save: !noteId, context });
     if (!r || r.error) { setError(r?.error || 'No explanation'); maybeResume(); return; }
     if (noteId) await send({ type: 'updateNote', id: noteId, patch: { definition: r.explanation, kind: 'card', term: text.length <= 80 ? text : '' } });
     toast('Explanation saved as a review card');
-    setStatus('Claude explains'); setText(r.explanation, 'answer');
+    setStatus('Explanation'); setText(r.explanation, 'answer');
     setActions([{ label: '🎤 Ask more', fn: startListening }, { label: 'Repeat', ghost: true, fn: () => speakAnswer(r.explanation) }]);
     speakAnswer(r.explanation);
   }

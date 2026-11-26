@@ -22,3 +22,22 @@ def test_manifest_allows_only_the_given_ids():
 def test_bad_extension_ids_are_refused(bad):
     with pytest.raises(SystemExit):
         install.main(["--extension-id", bad])
+
+
+def test_launcher_runs_a_copied_host(tmp_path):
+    launcher = install.write_launcher(tmp_path)
+    copied_host = tmp_path / "host.py"
+    assert copied_host.exists()
+    assert copied_host.read_bytes() == install.HOST_PY.read_bytes()
+    launcher_text = launcher.read_text(encoding="utf-8")
+    assert str(copied_host) in launcher_text
+    assert str(install.HOST_PY) not in launcher_text
+
+
+def test_uninstall_removes_the_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(install, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(install.os, "name", "posix")
+    monkeypatch.setattr(install.Path, "home", lambda: tmp_path)
+    install.write_launcher(tmp_path)
+    install.uninstall()
+    assert not (tmp_path / "host.py").exists()

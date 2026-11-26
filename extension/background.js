@@ -39,7 +39,7 @@ Accept paraphrases and reasonable wording; mark partial when a key element is mi
 function normalizeBackend(b) { return b === 'native' ? 'claude-code' : b === 'api' ? 'anthropic-api' : (b || 'claude-code'); }
 
 async function callAI({ system, prompt, kind }) {
-  const s = await SN.getSettings();
+  const s = Object.assign({}, await SN.getSettings(), await SN.getSecrets());
   const backend = normalizeBackend(s.backend);
   switch (backend) {
     case 'claude-code': {
@@ -70,6 +70,7 @@ async function callAI({ system, prompt, kind }) {
     }
     case 'openai-api': {
       const base = (s.openaiBaseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+      if (!SN.validBaseUrl(base)) throw new Error('The endpoint must use https (http is allowed only for localhost)');
       const needsKey = /api\.openai\.com|openrouter\.ai|groq\.com|together|mistral|deepseek|x\.ai/i.test(base);
       if (needsKey && !s.openaiKey) throw new Error('No API key set for the OpenAI-compatible endpoint (Settings)');
       const model = kind === 'narration' ? s.openaiNarrationModel : s.openaiAnswerModel;
@@ -113,7 +114,8 @@ function sendNative(msg) {
 
 // ---------- ChatGPT web bridge ----------
 // Keeps one pinned chatgpt.com tab (temporary chat) and drives its real composer through chatgpt-bridge.js.
-const CHATGPT_URL = 'https://chatgpt.com/?temporary-chat=true';
+const CHATGPT_MARKER = '#study-narrator';
+const CHATGPT_URL = 'https://chatgpt.com/?temporary-chat=true' + CHATGPT_MARKER;
 let chatgptQueue = Promise.resolve();
 let chatgptPageKey = null; // which page the current ChatGPT thread is about
 
@@ -123,7 +125,7 @@ function chatgptWebAsk(text, kind) {
     const tab = await ensureChatGPTTab();
     const newChat = kind === 'narration' || !chatgptPageKey; // start a fresh temporary chat per page
     if (newChat) {
-      await navigateTab(tab.id, s.chatgptTemporary === false ? 'https://chatgpt.com/' : CHATGPT_URL);
+      await navigateTab(tab.id, s.chatgptTemporary === false ? 'https://chatgpt.com/' + CHATGPT_MARKER : CHATGPT_URL);
       await waitForBridge(tab.id, 60000);
       chatgptPageKey = Date.now();
     }
@@ -181,10 +183,20 @@ function navigateTab(tabId, url) {
   });
 }
 async function ensureChatGPTTab() {
-  const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/*', 'https://chat.openai.com/*'] });
-  let tab = tabs.find(t => t.pinned) || tabs[0];
+  const saved = await chrome.storage.session.get('chatgptTabId');
+  let tab = null;
+  if (saved.chatgptTabId != null) {
+    tab = await chrome.tabs.get(saved.chatgptTabId).catch(() => null);
+    if (tab && !/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url || '')) tab = null;
+  }
+  if (!tab) {
+    const pinnedTabs = await chrome.tabs.query({ pinned: true });
+    tab = pinnedTabs.find(candidate => /^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(candidate.url || '') && (candidate.url || '').includes(CHATGPT_MARKER)) || null;
+    if (tab) await chrome.storage.session.set({ chatgptTabId: tab.id });
+  }
   if (!tab) {
     tab = await chrome.tabs.create({ url: CHATGPT_URL, active: false, pinned: true });
+    await chrome.storage.session.set({ chatgptTabId: tab.id });
   }
   // keep Edge's sleeping tabs / Chromium discarding away from this tab while it works for us
   await chrome.tabs.update(tab.id, { autoDiscardable: false }).catch(() => {});
@@ -362,11 +374,15 @@ async function appendTranscript(entry) {
 async function listNotes() { return (await chrome.storage.local.get('notes')).notes || []; }
 async function writeNotes(notes) { await chrome.storage.local.set({ notes }); }
 async function saveNote(n) {
+  n = n || {};
   const notes = await listNotes();
+  const stringField = (value) => String(value ?? '').trim().slice(0, 20000);
+  const kind = ['highlight', 'card', 'note'].includes(n.kind) ? n.kind : 'highlight';
   const note = {
-    id: SN.uid(), kind: n.kind || 'highlight', text: (n.text || '').trim(), term: (n.term || '').trim(),
-    definition: (n.definition || '').trim(), note: (n.note || '').trim(), tags: n.tags || [],
-    url: n.url || '', title: n.title || '', created: Date.now(), srs: { reps: 0, interval: 0, ease: 2.5, due: Date.now() },
+    id: SN.uid(), kind, text: stringField(n.text), term: stringField(n.term),
+    definition: stringField(n.definition), note: stringField(n.note),
+    tags: Array.isArray(n.tags) ? n.tags.filter(t => typeof t === 'string').slice(0, 20).map(t => t.slice(0, 40)) : [],
+    url: stringField(n.url), title: stringField(n.title), created: Date.now(), srs: { reps: 0, interval: 0, ease: 2.5, due: Date.now() },
   };
   if (!note.text && !note.term) throw new Error('Nothing to save');
   const dup = notes.find(x => x.text === note.text && x.term === note.term && x.url === note.url);
@@ -460,10 +476,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'testBackend': return await testBackend();
       case 'injectNow': return await injectIntoOpenTabs();
       case 'hasAllSites': return { allowed: await chrome.permissions.contains({ origins: ['<all_urls>'] }).catch(() => false) };
+      case 'openChatGPTTab': {
+        if (page) return { error: 'not allowed from a web page' };
+        const tab = await ensureChatGPTTab();
+        await chrome.tabs.update(tab.id, { active: true });
+        return { ok: true, tabId: tab.id };
+      }
       case 'chatgptDebug': {
-        const tabs = await chrome.tabs.query({ url: ['https://chatgpt.com/*', 'https://chat.openai.com/*'] });
-        const tab = tabs.find(t => t.pinned) || tabs[0];
-        if (!tab) return { error: 'no ChatGPT tab' };
+        const saved = await chrome.storage.session.get('chatgptTabId');
+        const tab = saved.chatgptTabId == null ? null : await chrome.tabs.get(saved.chatgptTabId).catch(() => null);
+        if (!tab || !/^https:\/\/(chatgpt\.com|chat\.openai\.com)\//.test(tab.url || '')) return { error: 'no ChatGPT tab' };
         try { return Object.assign({ tabId: tab.id, status: tab.status, discarded: tab.discarded }, await chrome.tabs.sendMessage(tab.id, { type: 'chatgpt.debug' })); }
         catch (e) { return { tabId: tab.id, status: tab.status, discarded: tab.discarded, error: String(e.message || e) }; }
       }
@@ -516,7 +538,7 @@ async function injectIntoOpenTabs() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
-  injectIntoOpenTabs();
+  injectIntoOpenTabs().catch(() => {});
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({ id: 'sn-save', title: 'Save to Study Narrator memory', contexts: ['selection'] });
     chrome.contextMenus.create({ id: 'sn-explain', title: 'Explain with AI and save as card', contexts: ['selection'] });

@@ -17,12 +17,14 @@ Thanks for helping improve Study Narrator.
 - **No personal paths, accounts or keys** in code, tests or docs.
 
 ## Development
+Prerequisites: Python 3.10+, Node 18+, Microsoft Edge.
+
 1. Load `extension/` unpacked (see README).
 2. After an edit, click **Reload** on the extension's card.
 3. Run the checks:
    ```
    python -m pip install pytest playwright
-   python -m pytest tests/test_host.py tests/test_install.py tests/test_background.py
+   python -m pytest tests -q
    python tests/test_widget.py
    python tests/test_takeover.py
    python tests/test_isolation.py

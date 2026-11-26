@@ -1,9 +1,8 @@
 """Load the extension into a headless Edge (throwaway profile) and exercise the real flows:
 widget mounts, Read -> background -> native host -> Claude -> narration sentences, save note, panel lists it.
-Run: python test_extension.py [--keep]
+Run: python test_extension.py [--keep] [--codex] [--chatgpt]
 """
-import json, os, sys, tempfile, time
-from playwright.sync_api import sync_playwright
+import argparse, json, os, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from widget_driver import Widget, launch, serve  # noqa: E402
@@ -26,16 +25,25 @@ PAGE = """<!doctype html><html><head><title>Lesson 3: Skills in Claude Code</tit
 
 def main():
     global EXT_ID
-    keep = "--keep" in sys.argv
+    parser = argparse.ArgumentParser(description="Live extension test prerequisites: Microsoft Edge; pip install playwright; the native host registered for this test profile's extension ID with python host/install.py --extension-id <id> (the ID is printed from the service worker URL); a signed-in claude CLI; plus codex for --codex or a chatgpt.com login for --chatgpt.")
+    parser.add_argument("--keep", action="store_true", help="keep the temporary browser profile")
+    parser.add_argument("--codex", action="store_true", help="test the signed-in codex CLI backend")
+    parser.add_argument("--chatgpt", action="store_true", help="test the chatgpt.com backend (requires login)")
+    args = parser.parse_args()
+    from playwright.sync_api import sync_playwright
+
+    keep = args.keep
     tmp = tempfile.mkdtemp(prefix="sn-edge-")
     with open(os.path.join(tmp, "lesson.html"), "w", encoding="utf-8") as f:
         f.write(PAGE)
     srv, base = serve(tmp)
     results = {}
-    with sync_playwright() as p:
+    try:
+      with sync_playwright() as p:
         ctx, sw = launch(p, os.path.join(tmp, "profile"))
         try:
             EXT_ID = sw.url.split('/')[2]
+            print(f"Extension ID for native host registration: {EXT_ID}")
             results["service_worker"] = True
             page = ctx.new_page()
             logs = []
@@ -48,6 +56,8 @@ def main():
             # host ping through the real native messaging path
             ping = sw.evaluate("() => new Promise(r => chrome.runtime.sendNativeMessage('study_narrator', {action:'ping'}, x => r(chrome.runtime.lastError ? {error: chrome.runtime.lastError.message} : x)))")
             results["native_ping"] = ping
+            if not isinstance(ping, dict) or ping.get("error") or ping.get("ok") is False:
+                raise RuntimeError(f"Native host ping failed: {ping!r}")
             # click Read -> narration prep via Claude
             w.click("[data-act=readToggle]")
             status = ""
@@ -94,12 +104,12 @@ def main():
                 sw.evaluate("async (p) => { const g = await chrome.storage.local.get('settings'); await chrome.storage.local.set({settings: Object.assign({}, g.settings||{}, p)}); }", dict({"backend": b}, **(extra or {})))
             def test_backend():
                 return panel.evaluate("() => new Promise(r => chrome.runtime.sendMessage({type:'testBackend'}, x => r(x)))")
-            if "--codex" in sys.argv:
+            if args.codex:
                 set_backend("codex")
                 results["codex_test"] = test_backend()
                 ans = panel.evaluate("() => new Promise(r => chrome.runtime.sendMessage({type:'ask', question:'In one sentence, what is progressive disclosure here?', context:{title:'Lesson 3', url:'x', script:'Only the name and description are loaded at startup. The body of SKILL.md is read on demand.'}, history:[]}, x => r(x)))")
                 results["codex_answer"] = ans
-            if "--chatgpt" in sys.argv:
+            if args.chatgpt:
                 set_backend("chatgpt-web")
                 results["chatgpt_test"] = test_backend()
                 tabs = [t.url for t in ctx.pages]
@@ -113,10 +123,24 @@ def main():
             set_backend("claude-code")
         finally:
             ctx.close()
-    srv.shutdown(); srv.server_close()
-    print(json.dumps(results, indent=1))
-    if not keep:
-        import shutil; shutil.rmtree(tmp, ignore_errors=True)
+      srv.shutdown(); srv.server_close()
+      print(json.dumps(results, indent=1))
+      ok = {
+        "native_ping": isinstance(results.get("native_ping"), dict) and not results["native_ping"].get("error") and results["native_ping"].get("ok") is not False,
+        "narration_status": results.get("narration_status", "").startswith(("Reading", "Ready")),
+        "notes_after_save": bool(results.get("notes_after_save")),
+        "panel_notes": results.get("panel_notes", 0) >= 1,
+        "answer": bool(results.get("answer")) and "Error" not in results.get("answer", ""),
+        "options_errors": not results.get("options_errors", ["not run"]),
+      }
+      results["ok"] = ok
+      print(json.dumps({"ok": ok}, indent=1))
+      if not all(ok.values()):
+          raise SystemExit(1)
+    finally:
+      srv.shutdown(); srv.server_close()
+      if not keep:
+          import shutil; shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
